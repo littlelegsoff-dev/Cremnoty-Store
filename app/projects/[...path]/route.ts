@@ -2,6 +2,15 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { PROJECTS_DIR } from '@/lib/catalog';
 
+/**
+ * Базовый адрес репозитория на GitHub: если файла нет рядом с приложением
+ * (например, APK лежит в Releases или сборка развёрнута без медиа),
+ * запрос перенаправляется в raw-хранилище репозитория.
+ */
+const RAW_BASE =
+  process.env.CSTORE_RAW_BASE ??
+  'https://raw.githubusercontent.com/littlelegsoff-dev/Cremnoty-Store/main/projects';
+
 const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -49,6 +58,13 @@ export async function GET(
       },
     });
   } catch {
+    if (relative && !relative.includes('..')) {
+      const fallback = `${RAW_BASE}/${relative.split('/').map(encodeURIComponent).join('/')}`;
+      return new Response(null, {
+        status: 302,
+        headers: { Location: fallback, 'Cache-Control': 'public, max-age=60' },
+      });
+    }
     return new Response('Not found', { status: 404 });
   }
 }
