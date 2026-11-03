@@ -1,0 +1,62 @@
+{
+  "name": "CremNotes",
+  "packageId": "com.cremnity.notes",
+  "summary": "Лёгкие заметки с Markdown, задачами и шифрованием — без аккаунтов и облака.",
+  "description": "CremNotes — быстрые заметки, которые не просят аккаунт и не отправляют данные в облако.\n\nВозможности:\n• Markdown и чек-листы\n• Локальное шифрование базы (AES-256)\n• Система тегов и полнотекстовый поиск\n• Экспорт в .md, .txt и PDF\n• Ночная и светлая темы, Material You\n• Синхронизация между устройствами по локальному Wi-Fi\n\nПриложение распространяется по лицензии GPL-3.0. Исходный код доступен в репозитории проекта.",
+  "developer": "Cremnity Labs",
+  "developerUrl": "https://github.com/littlelegsoff-dev",
+  "license": "GPL-3.0",
+  "categories": [
+    "Заметки",
+    "Продуктивность"
+  ],
+  "tags": [
+    "markdown",
+    "офлайн",
+    "шифрование",
+    "open source"
+  ],
+  "icon": "icon.png",
+  "screenshots": [
+    "screenshots/1.png",
+    "screenshots/2.png",
+    "screenshots/3.png"
+  ],
+  "website": "https://github.com/littlelegsoff-dev/Cremnoty-Store",
+  "sourceCode": "https://github.com/littlelegsoff-dev/Cremnoty-Store",
+  "issueTracker": "https://github.com/littlelegsoff-dev/Cremnoty-Store/issues",
+  "donate": null,
+  "featured": true,
+  "free": true,
+  "antiFeatures": [],
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.POST_NOTIFICATIONS"
+  ],
+  "addedAt": "2026-11-03",
+  "releases": [
+    {
+      "version": "1.2.0",
+      "versionCode": 120,
+      "date": "2026-11-03",
+      "size": 239,
+      "file": "cremnotes-1.2.0.apk",
+      "sha256": "9080ba9f5b38d5c3e54a2ff1b1659e3a72b8498e6f3f2422430c06672536ee41",
+      "minSdk": 24,
+      "targetSdk": 35,
+      "changelog": "• Новая тёмная тема\n• Экспорт заметок в PDF\n• Ускорен поиск по большой базе"
+    },
+    {
+      "version": "1.1.0",
+      "versionCode": 110,
+      "date": "2026-09-18",
+      "size": 239,
+      "file": "cremnotes-1.1.0.apk",
+      "sha256": "9080ba9f5b38d5c3e54a2ff1b1659e3a72b8498e6f3f2422430c06672536ee41",
+      "minSdk": 24,
+      "targetSdk": 35,
+      "changelog": "• Исправлена синхронизация по Wi-Fi\n• Мелкие правки интерфейса"
+    }
+  ]
+}

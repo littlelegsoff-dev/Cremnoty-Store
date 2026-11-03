@@ -1,0 +1,33 @@
+{
+  "name": "Название приложения",
+  "packageId": "com.example.app",
+  "summary": "Короткое описание в одну строку — оно видно в карточке каталога.",
+  "description": "Полное описание приложения.\n\nПереводы строк сохраняются на странице приложения.",
+  "developer": "Имя разработчика",
+  "developerUrl": "https://example.com",
+  "license": "GPL-3.0",
+  "categories": ["Инструменты"],
+  "tags": ["офлайн", "open source"],
+  "icon": "icon.png",
+  "screenshots": ["screenshots/1.png"],
+  "website": null,
+  "sourceCode": "https://github.com/example/app",
+  "issueTracker": "https://github.com/example/app/issues",
+  "donate": null,
+  "featured": false,
+  "free": true,
+  "antiFeatures": [],
+  "permissions": ["android.permission.INTERNET"],
+  "addedAt": "2026-11-03",
+  "releases": [
+    {
+      "version": "1.0.0",
+      "versionCode": 100,
+      "date": "2026-11-03",
+      "file": "app-1.0.0.apk",
+      "minSdk": 24,
+      "targetSdk": 35,
+      "changelog": "Первый публичный релиз."
+    }
+  ]
+}

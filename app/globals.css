@@ -1,0 +1,179 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink-950: #050408;
+  --color-ink-900: #08060d;
+  --color-ink-850: #0b0913;
+  --color-ink-800: #100d1a;
+  --color-ink-700: #171326;
+  --color-ink-600: #221c36;
+
+  --color-violet-50: #f6f1ff;
+  --color-violet-100: #ece2ff;
+  --color-violet-200: #dcc9ff;
+  --color-violet-300: #c4a5ff;
+  --color-violet-400: #a97bff;
+  --color-violet-500: #8f57f7;
+  --color-violet-600: #7c3aed;
+  --color-violet-700: #6425cc;
+
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-4xl: 2rem;
+}
+
+@layer base {
+  * {
+    border-color: color-mix(in oklab, var(--color-violet-400) 12%, transparent);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ink-950);
+    color: var(--color-violet-50);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-violet-500) 45%, transparent);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-ink-950);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--color-violet-500) 35%, var(--color-ink-700));
+    border-radius: 999px;
+    border: 2px solid var(--color-ink-950);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--color-violet-400) 55%, var(--color-ink-700));
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-violet-400);
+    outline-offset: 2px;
+  }
+}
+
+@utility glass {
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--color-violet-400) 8%, rgba(16, 13, 26, 0.85)),
+    rgba(8, 6, 13, 0.9)
+  );
+  border: 1px solid color-mix(in oklab, var(--color-violet-300) 14%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+@utility card-hover {
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.28s ease,
+    box-shadow 0.28s ease,
+    background-color 0.28s ease;
+  &:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in oklab, var(--color-violet-400) 45%, transparent);
+    box-shadow:
+      0 18px 40px -18px rgba(124, 58, 237, 0.55),
+      0 0 0 1px color-mix(in oklab, var(--color-violet-400) 18%, transparent);
+  }
+}
+
+@utility text-gradient {
+  background: linear-gradient(
+    100deg,
+    var(--color-violet-50) 0%,
+    var(--color-violet-200) 45%,
+    var(--color-violet-400) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Декоративные пятна на фоне */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora::before,
+.aurora::after {
+  content: '';
+  position: absolute;
+  width: 60vw;
+  height: 60vw;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.45;
+}
+.aurora::before {
+  top: -22vw;
+  left: -10vw;
+  background: radial-gradient(circle, #7c3aed 0%, transparent 65%);
+}
+.aurora::after {
+  bottom: -30vw;
+  right: -12vw;
+  background: radial-gradient(circle, #a97bff 0%, transparent 68%);
+  opacity: 0.28;
+}
+.grid-lines {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(169, 123, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(169, 123, 255, 0.055) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

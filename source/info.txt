@@ -1,1 +1,12 @@
 Сурсы проекта
+=============
+
+site/       — исходники сайта CStore (Next.js):
+              app/        страницы и API (/api/apps, /projects/*, /feed.xml)
+              components/ UI каталога и карточки приложений
+              lib/        парсер метаданных projects/**/app.json, типы, форматтеры
+
+projects/   — папки приложений каталога (см. projects/_template)
+              каждая папка: app.json + icon.png + скриншоты + APK
+
+Документация по формату метаданных: страница /docs на сайте и README.md в корне.
