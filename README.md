@@ -59,6 +59,19 @@
 }
 ```
 
+## Деплой на Vercel
+
+Сайт задеплоен: **https://cremnity-store.vercel.app**
+
+- Проект Vercel: `cremnity-store` (framework: Next.js, build: `npm run build`).
+- Автодеплой по git-пушу требует GitHub Login Connection в настройках Vercel
+  (Integrations → GitHub). Пока он не подключён, в проекте используется сборка
+  «загрузчик»: `package.json` + `scripts/vercel-bootstrap.mjs`, которая на этапе
+  `prebuild` скачивает исходники из публичного репозитория.
+- Само содержимое каталога сайт читает из GitHub во время работы, поэтому новые
+  приложения появляются **без** передеплоя (кэш до минуты).
+- Проверить источник данных и увидеть список найденных приложений: `/api/status`.
+
 ## Локальный запуск
 
 ```bash
