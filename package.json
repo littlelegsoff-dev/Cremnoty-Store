@@ -4,7 +4,9 @@
   "private": true,
   "description": "CStore — CremnityStore, открытый каталог Android-приложений (аналог F-Droid)",
   "scripts": {
+    "predev": "node scripts/vercel-bootstrap.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/vercel-bootstrap.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
