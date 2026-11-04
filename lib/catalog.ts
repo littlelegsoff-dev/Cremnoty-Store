@@ -1,12 +1,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { AppRecord, AppSummary, Release } from './types';
+import { parseSimpleYaml } from './yaml';
+import { readRemoteCatalog, REPO, REF } from './remote';
 
 /** Каталог с приложениями внутри репозитория (используется как локальный источник). */
 export const PROJECTS_DIR = path.join(process.cwd(), 'projects');
-
-const REPO = process.env.CSTORE_REPO ?? 'littlelegsoff-dev/Cremnoty-Store';
-const REF = process.env.CSTORE_REF ?? 'main';
 
 /** RAW-ссылка на файлы репозитория (резерв, если файла нет в сборке). */
 export const RAW_BASE =
@@ -62,49 +61,6 @@ function list(value: unknown): string[] {
   return [];
 }
 
-/** Минимальный парсер YAML-подобных метаданных (key: value / списки). */
-export function parseSimpleYaml(raw: string): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  let currentKey: string | null = null;
-  const listBuffer: string[] = [];
-
-  const flush = () => {
-    if (currentKey && listBuffer.length) {
-      out[currentKey] = [...listBuffer];
-      listBuffer.length = 0;
-    }
-  };
-
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim() || line.trim().startsWith('#')) continue;
-    const itemMatch = line.match(/^\s*-\s+(.*)$/);
-    if (itemMatch && currentKey) {
-      listBuffer.push(itemMatch[1].replace(/^["']|["']$/g, '').trim());
-      continue;
-    }
-    const kv = line.match(/^([A-Za-z0-9_.-]+)\s*:\s*(.*)$/);
-    if (!kv) continue;
-    flush();
-    currentKey = kv[1];
-    const value = kv[2].replace(/^["']|["']$/g, '').trim();
-    if (value === '') {
-      out[currentKey] = [];
-    } else if (value.startsWith('[')) {
-      out[currentKey] = value
-        .replace(/^\[|\]$/g, '')
-        .split(',')
-        .map((v) => v.replace(/^["']|["']$/g, '').trim())
-        .filter(Boolean);
-      currentKey = null;
-    } else {
-      out[currentKey] = value;
-      currentKey = null;
-    }
-  }
-  flush();
-  return out;
-}
-
 // ---------- локальные файлы ----------
 
 async function exists(p: string): Promise<boolean> {
@@ -149,63 +105,6 @@ async function readLocalApps(): Promise<LocalApp[]> {
     if (meta) apps.push({ slug: entry.name, meta, dir });
   }
   return apps;
-}
-
-// ---------- удалённый источник (GitHub) ----------
-
-type RemoteApp = { slug: string; meta: Record<string, unknown> };
-
-async function readRemoteApps(): Promise<RemoteApp[] | null> {
-  try {
-    const headers: Record<string, string> = {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'cstore-catalog',
-    };
-    if (process.env.CSTORE_GITHUB_TOKEN) {
-      headers.Authorization = `Bearer ${process.env.CSTORE_GITHUB_TOKEN}`;
-    }
-
-    const treeResponse = await fetch(
-      `https://api.github.com/repos/${REPO}/git/trees/${REF}?recursive=1`,
-      { headers, next: { revalidate: 300 } },
-    );
-    if (!treeResponse.ok) return null;
-
-    const tree = (await treeResponse.json()) as { tree?: { path?: string }[] };
-    const candidates = new Map<string, string>();
-
-    for (const node of tree.tree ?? []) {
-      const match = node.path?.match(/^projects\/([^/]+)\/(app\.json|metadata\.json|app\.ya?ml)$/);
-      if (!match) continue;
-      const [, slug, file] = match;
-      if (slug.startsWith('_') || slug.startsWith('.')) continue;
-      const current = candidates.get(slug);
-      // приоритет: app.json → metadata.json → app.yml
-      if (!current || META_NAMES.indexOf(file) < META_NAMES.indexOf(current)) {
-        candidates.set(slug, file);
-      }
-    }
-
-    const apps: RemoteApp[] = [];
-    for (const [slug, file] of candidates) {
-      const fileResponse = await fetch(`${RAW_BASE}/projects/${slug}/${file}`, {
-        next: { revalidate: 300 },
-      });
-      if (!fileResponse.ok) continue;
-      const text = await fileResponse.text();
-      try {
-        const meta = file.endsWith('.json')
-          ? (JSON.parse(text) as Record<string, unknown>)
-          : parseSimpleYaml(text);
-        apps.push({ slug, meta });
-      } catch {
-        /* пропускаем битые метаданные */
-      }
-    }
-    return apps;
-  } catch {
-    return null;
-  }
 }
 
 // ---------- сборка записи приложения ----------
@@ -329,7 +228,7 @@ export async function loadApps(): Promise<AppRecord[]> {
 
   let entries: { slug: string; meta: Record<string, unknown>; dir: string | null }[] = [];
 
-  const remote = remoteEnabled() ? await readRemoteApps() : null;
+  const remote = remoteEnabled() ? await readRemoteCatalog() : null;
   if (remote && remote.length > 0) {
     entries = remote.map((app) => ({
       slug: app.slug,
