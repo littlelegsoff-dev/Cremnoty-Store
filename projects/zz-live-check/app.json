@@ -1,0 +1,14 @@
+{
+  "name": "Live Check",
+  "packageId": "dev.cremnity.livecheck",
+  "summary": "Временная запись для проверки живого обновления каталога.",
+  "developer": "Cremnity",
+  "license": "MIT",
+  "categories": ["Тест"],
+  "icon": "icon.png",
+  "featured": false,
+  "addedAt": "2026-11-04",
+  "releases": [
+    { "version": "0.0.1", "versionCode": 1, "date": "2026-11-04", "file": "live-check.apk", "changelog": "Проверка." }
+  ]
+}
