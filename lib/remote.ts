@@ -3,80 +3,83 @@ import { parseSimpleYaml } from './yaml';
 const REPO = process.env.CSTORE_REPO ?? 'littlelegsoff-dev/Cremnoty-Store';
 const REF = process.env.CSTORE_REF ?? 'main';
 
-const JSDELIVR_LIST = `https://data.jsdelivr.com/v1/packages/gh/${REPO}@${REF}?structure=flat`;
-const JSDELIVR_CDN = `https://cdn.jsdelivr.net/gh/${REPO}@${REF}`;
-const RAW_CDN = `https://raw.githubusercontent.com/${REPO}/${REF}`;
-
 const META_NAMES = ['app.json', 'metadata.json', 'app.yml', 'app.yaml'];
+
+/** Кэш ответов GitHub — 60 секунд, чтобы не упираться в лимит запросов. */
+const REVALIDATE = Number(process.env.CSTORE_REVALIDATE ?? 60);
 
 export type RemoteMeta = { slug: string; meta: Record<string, unknown> };
 
-type JsDelivrFile = { name?: string; type?: string };
+function githubHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'cstore-catalog',
+  };
+  if (process.env.CSTORE_GITHUB_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.CSTORE_GITHUB_TOKEN}`;
+  }
+  return headers;
+}
 
-/** Список файлов репозитория через jsDelivr (без лимитов GitHub API). */
-async function listFilesViaJsDelivr(): Promise<string[] | null> {
+/** Актуальный SHA ветки — чтобы читать файлы по неизменяемому адресу. */
+async function resolveSha(): Promise<string | null> {
   try {
-    const response = await fetch(JSDELIVR_LIST, {
-      headers: { 'User-Agent': 'cstore-catalog' },
-      next: { revalidate: 120 },
+    const response = await fetch(`https://api.github.com/repos/${REPO}/commits/${REF}`, {
+      headers: githubHeaders(),
+      next: { revalidate: REVALIDATE },
     });
     if (!response.ok) return null;
-    const payload = (await response.json()) as { files?: JsDelivrFile[] };
-    return (payload.files ?? [])
-      .map((file) => file.name ?? '')
-      .filter((name) => name.startsWith('/projects/'));
+    const payload = (await response.json()) as { sha?: string };
+    return payload.sha ?? null;
   } catch {
     return null;
   }
 }
 
-/** Резервный список файлов через GitHub API (одна попытка). */
-async function listFilesViaGithub(): Promise<string[] | null> {
+async function listMetaFiles(sha: string): Promise<string[] | null> {
   try {
-    const headers: Record<string, string> = {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'cstore-catalog',
-    };
-    if (process.env.CSTORE_GITHUB_TOKEN) {
-      headers.Authorization = `Bearer ${process.env.CSTORE_GITHUB_TOKEN}`;
-    }
     const response = await fetch(
-      `https://api.github.com/repos/${REPO}/git/trees/${REF}?recursive=1`,
-      { headers, next: { revalidate: 120 } },
+      `https://api.github.com/repos/${REPO}/git/trees/${sha}?recursive=1`,
+      { headers: githubHeaders(), next: { revalidate: REVALIDATE } },
     );
     if (!response.ok) return null;
     const payload = (await response.json()) as { tree?: { path?: string; type?: string }[] };
     return (payload.tree ?? [])
-      .filter((node) => node.type === 'blob' && node.path)
-      .map((node) => `/${node.path}`);
+      .filter((node) => node.type === 'blob' && node.path?.startsWith('projects/'))
+      .map((node) => node.path as string);
   } catch {
     return null;
   }
 }
 
 async function fetchText(url: string): Promise<string | null> {
-  for (const candidate of [url, url.replace(JSDELIVR_CDN, RAW_CDN)]) {
-    try {
-      const response = await fetch(candidate, { next: { revalidate: 120 } });
-      if (response.ok) return await response.text();
-    } catch {
-      /* пробуем следующий источник */
-    }
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'cstore-catalog' },
+      next: { revalidate: REVALIDATE },
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
   }
-  return null;
 }
 
 /**
- * Читает метаданные приложений прямо из репозитория.
- * Работает без токена: сначала jsDelivr, затем GitHub API.
+ * Читает метаданные приложений прямо из репозитория, поэтому новые приложения
+ * появляются на сайте без передеплоя. Если GitHub недоступен — вернёт null,
+ * и каталог соберётся из файлов сборки.
  */
 export async function readRemoteCatalog(): Promise<RemoteMeta[] | null> {
-  const files = (await listFilesViaJsDelivr()) ?? (await listFilesViaGithub());
+  const sha = await resolveSha();
+  if (!sha) return null;
+
+  const files = await listMetaFiles(sha);
   if (!files) return null;
 
   const metaBySlug = new Map<string, string>();
   for (const fullPath of files) {
-    const match = fullPath.match(/^\/projects\/([^/]+)\/([^/]+)$/);
+    const match = fullPath.match(/^projects\/([^/]+)\/([^/]+)$/);
     if (!match) continue;
     const [, slug, file] = match;
     if (slug.startsWith('_') || slug.startsWith('.')) continue;
@@ -89,12 +92,14 @@ export async function readRemoteCatalog(): Promise<RemoteMeta[] | null> {
 
   const apps = await Promise.all(
     [...metaBySlug.entries()].map(async ([slug, file]) => {
-      const text = await fetchText(`${JSDELIVR_CDN}/projects/${slug}/${file}`);
-      if (!text) return null;
+      const raw = await fetchText(
+        `https://raw.githubusercontent.com/${REPO}/${sha}/projects/${slug}/${file}`,
+      );
+      if (!raw) return null;
       try {
         const meta = file.endsWith('.json')
-          ? (JSON.parse(text) as Record<string, unknown>)
-          : parseSimpleYaml(text);
+          ? (JSON.parse(raw) as Record<string, unknown>)
+          : parseSimpleYaml(raw);
         return { slug, meta } satisfies RemoteMeta;
       } catch {
         return null;
@@ -105,4 +110,4 @@ export async function readRemoteCatalog(): Promise<RemoteMeta[] | null> {
   return apps.filter((app): app is RemoteMeta => Boolean(app));
 }
 
-export { REPO, REF, RAW_CDN };
+export { REPO, REF };
