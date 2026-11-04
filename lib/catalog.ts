@@ -2,14 +2,17 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { AppRecord, AppSummary, Release } from './types';
 
-/** Каталог с приложениями внутри репозитория. */
+/** Каталог с приложениями внутри репозитория (используется как локальный источник). */
 export const PROJECTS_DIR = path.join(process.cwd(), 'projects');
 
-/** RAW-ссылка на файлы репозитория (используется, если файл не найден локально). */
-const RAW_BASE =
-  process.env.CSTORE_RAW_BASE ??
-  'https://raw.githubusercontent.com/littlelegsoff-dev/Cremnoty-Store/main';
+const REPO = process.env.CSTORE_REPO ?? 'littlelegsoff-dev/Cremnoty-Store';
+const REF = process.env.CSTORE_REF ?? 'main';
 
+/** RAW-ссылка на файлы репозитория (резерв, если файла нет в сборке). */
+export const RAW_BASE =
+  process.env.CSTORE_RAW_BASE ?? `https://raw.githubusercontent.com/${REPO}/${REF}`;
+
+const META_NAMES = ['app.json', 'metadata.json', 'app.yml', 'app.yaml'];
 const ICON_CANDIDATES = [
   'icon.png',
   'icon.jpg',
@@ -18,6 +21,17 @@ const ICON_CANDIDATES = [
   'icon.svg',
   'ic_launcher.png',
 ];
+
+/**
+ * Читать каталог напрямую из GitHub (чтобы новые приложения из репозитория
+ * появлялись на сайте без пересборки). Отключается переменной CSTORE_REMOTE_CATALOG=0.
+ */
+function remoteEnabled(): boolean {
+  if (process.env.CSTORE_REMOTE_CATALOG === '0') return false;
+  return Boolean(process.env.VERCEL) || process.env.CSTORE_REMOTE_CATALOG === '1';
+}
+
+// ---------- нормализация значений ----------
 
 function str(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -48,8 +62,8 @@ function list(value: unknown): string[] {
   return [];
 }
 
-/** Простой фронтматтер YAML-подобного вида (key: value) — подстраховка, если нет JSON. */
-function parseSimpleYaml(raw: string): Record<string, unknown> {
+/** Минимальный парсер YAML-подобных метаданных (key: value / списки). */
+export function parseSimpleYaml(raw: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   let currentKey: string | null = null;
   const listBuffer: string[] = [];
@@ -91,20 +105,7 @@ function parseSimpleYaml(raw: string): Record<string, unknown> {
   return out;
 }
 
-async function readMeta(dir: string): Promise<Record<string, unknown> | null> {
-  for (const file of ['app.json', 'metadata.json', 'app.yml', 'app.yaml']) {
-    try {
-      const raw = await fs.readFile(path.join(dir, file), 'utf8');
-      if (file.endsWith('.json')) {
-        return JSON.parse(raw) as Record<string, unknown>;
-      }
-      return parseSimpleYaml(raw);
-    } catch {
-      /* пробуем следующий файл */
-    }
-  }
-  return null;
-}
+// ---------- локальные файлы ----------
 
 async function exists(p: string): Promise<boolean> {
   try {
@@ -115,55 +116,23 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-function encodeAssetPath(relative: string): string {
-  return relative
-    .split(path.sep)
-    .map((seg) => encodeURIComponent(seg))
-    .join('/');
-}
-
-function resolveAsset(appId: string, value: string): string {
-  if (!value) return '';
-  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
-  const clean = value.replace(/^\.?\//, '');
-  return `/projects/${encodeURIComponent(appId)}/${encodeAssetPath(clean)}`;
-}
-
-function pickIconCandidates(meta: Record<string, unknown>): string[] {
-  const direct = [str(meta.icon), str(meta.logo), str(meta.image)].filter(Boolean);
-  return [...direct, ...ICON_CANDIDATES];
-}
-
-function normalizeRelease(raw: any, appId: string): Release | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const version = str(raw.version) || str(raw.versionName) || '—';
-  const file = str(raw.file) || str(raw.apk) || str(raw.path) || null;
-  return {
-    version,
-    versionCode: num(raw.versionCode) ?? num(raw.version_code) ?? 0,
-    date: str(raw.date) || str(raw.released) || null,
-    size: num(raw.size),
-    file,
-    url: str(raw.url) ? resolveAsset(appId, str(raw.url)) : null,
-    sha256: str(raw.sha256) || null,
-    minSdk: num(raw.minSdk),
-    targetSdk: num(raw.targetSdk),
-    changelog: str(raw.changelog) || str(raw.notes) || null,
-    downloadUrl: null,
-  };
-}
-
-async function readFileSize(appDir: string, file: string | null): Promise<number | null> {
-  if (!file) return null;
-  try {
-    const stat = await fs.stat(path.join(appDir, file.replace(/^\.?\//, '')));
-    return stat.size;
-  } catch {
-    return null;
+async function readMetaFromDir(dir: string): Promise<Record<string, unknown> | null> {
+  for (const file of META_NAMES) {
+    try {
+      const raw = await fs.readFile(path.join(dir, file), 'utf8');
+      return file.endsWith('.json')
+        ? (JSON.parse(raw) as Record<string, unknown>)
+        : parseSimpleYaml(raw);
+    } catch {
+      /* пробуем следующий файл */
+    }
   }
+  return null;
 }
 
-export async function loadApps(): Promise<AppRecord[]> {
+type LocalApp = { slug: string; meta: Record<string, unknown>; dir: string };
+
+async function readLocalApps(): Promise<LocalApp[]> {
   let entries: import('node:fs').Dirent[] = [];
   try {
     entries = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
@@ -171,96 +140,210 @@ export async function loadApps(): Promise<AppRecord[]> {
     return [];
   }
 
-  const apps: AppRecord[] = [];
-
+  const apps: LocalApp[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue;
+    const dir = path.join(PROJECTS_DIR, entry.name);
+    const meta = await readMetaFromDir(dir);
+    if (meta) apps.push({ slug: entry.name, meta, dir });
+  }
+  return apps;
+}
 
-    const appDir = path.join(PROJECTS_DIR, entry.name);
-    const meta = await readMeta(appDir);
-    if (!meta) continue;
+// ---------- удалённый источник (GitHub) ----------
 
-    const packageId = str(meta.packageId) || str(meta.package) || str(meta.id) || entry.name;
-    const name = str(meta.name) || str(meta.title) || entry.name;
+type RemoteApp = { slug: string; meta: Record<string, unknown> };
 
-    const rawReleases = Array.isArray(meta.releases) ? meta.releases : [];
-    const releases = rawReleases
-      .map((r) => normalizeRelease(r, entry.name))
-      .filter((r): r is Release => Boolean(r))
-      .sort((a, b) => b.versionCode - a.versionCode);
+async function readRemoteApps(): Promise<RemoteApp[] | null> {
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'cstore-catalog',
+    };
+    if (process.env.CSTORE_GITHUB_TOKEN) {
+      headers.Authorization = `Bearer ${process.env.CSTORE_GITHUB_TOKEN}`;
+    }
 
-    // Иконка
-    let iconUrl = '';
-    for (const candidate of pickIconCandidates(meta)) {
-      const rel = candidate.replace(/^\.?\//, '');
-      if (/^https?:\/\//i.test(candidate)) {
-        iconUrl = candidate;
+    const treeResponse = await fetch(
+      `https://api.github.com/repos/${REPO}/git/trees/${REF}?recursive=1`,
+      { headers, next: { revalidate: 300 } },
+    );
+    if (!treeResponse.ok) return null;
+
+    const tree = (await treeResponse.json()) as { tree?: { path?: string }[] };
+    const candidates = new Map<string, string>();
+
+    for (const node of tree.tree ?? []) {
+      const match = node.path?.match(/^projects\/([^/]+)\/(app\.json|metadata\.json|app\.ya?ml)$/);
+      if (!match) continue;
+      const [, slug, file] = match;
+      if (slug.startsWith('_') || slug.startsWith('.')) continue;
+      const current = candidates.get(slug);
+      // приоритет: app.json → metadata.json → app.yml
+      if (!current || META_NAMES.indexOf(file) < META_NAMES.indexOf(current)) {
+        candidates.set(slug, file);
+      }
+    }
+
+    const apps: RemoteApp[] = [];
+    for (const [slug, file] of candidates) {
+      const fileResponse = await fetch(`${RAW_BASE}/projects/${slug}/${file}`, {
+        next: { revalidate: 300 },
+      });
+      if (!fileResponse.ok) continue;
+      const text = await fileResponse.text();
+      try {
+        const meta = file.endsWith('.json')
+          ? (JSON.parse(text) as Record<string, unknown>)
+          : parseSimpleYaml(text);
+        apps.push({ slug, meta });
+      } catch {
+        /* пропускаем битые метаданные */
+      }
+    }
+    return apps;
+  } catch {
+    return null;
+  }
+}
+
+// ---------- сборка записи приложения ----------
+
+function assetUrl(slug: string, value: string): string {
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value) || value.startsWith('data:')) return value;
+  const clean = value.replace(/^\.?\//, '');
+  const encoded = clean.split('/').map(encodeURIComponent).join('/');
+  return `/projects/${encodeURIComponent(slug)}/${encoded}`;
+}
+
+function normalizeRelease(raw: unknown, slug: string): Release | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  const version = str(value.version) || str(value.versionName) || '—';
+  const file = str(value.file) || str(value.apk) || str(value.path) || null;
+  const url = str(value.url);
+
+  return {
+    version,
+    versionCode: num(value.versionCode) ?? num(value.version_code) ?? 0,
+    date: str(value.date) || str(value.released) || null,
+    size: num(value.size),
+    file,
+    url: url ? assetUrl(slug, url) : null,
+    sha256: str(value.sha256) || null,
+    minSdk: num(value.minSdk),
+    targetSdk: num(value.targetSdk),
+    changelog: str(value.changelog) || str(value.notes) || null,
+    downloadUrl: url ? assetUrl(slug, url) : file ? assetUrl(slug, file) : null,
+  };
+}
+
+async function buildApp(
+  slug: string,
+  meta: Record<string, unknown>,
+  dir: string | null,
+): Promise<AppRecord> {
+  const packageId = str(meta.packageId) || str(meta.package) || str(meta.id) || slug;
+  const name = str(meta.name) || str(meta.title) || slug;
+
+  const rawReleases = Array.isArray(meta.releases) ? meta.releases : [];
+  const releases = rawReleases
+    .map((item) => normalizeRelease(item, slug))
+    .filter((item): item is Release => Boolean(item))
+    .sort((a, b) => b.versionCode - a.versionCode);
+
+  // Иконка: сначала явная ссылка, затем поиск файла рядом с приложением
+  let iconUrl = '';
+  const explicitIcon = str(meta.icon) || str(meta.logo) || str(meta.image);
+  if (explicitIcon) {
+    iconUrl = assetUrl(slug, explicitIcon);
+  } else if (dir) {
+    for (const candidate of ICON_CANDIDATES) {
+      if (await exists(path.join(dir, candidate))) {
+        iconUrl = assetUrl(slug, candidate);
         break;
       }
-      if (rel && (await exists(path.join(appDir, rel)))) {
-        iconUrl = resolveAsset(entry.name, rel);
-        break;
-      }
     }
-    if (!iconUrl) {
-      iconUrl = `/projects/${encodeURIComponent(entry.name)}/icon.png`;
+  }
+  if (!iconUrl) iconUrl = assetUrl(slug, 'icon.png');
+
+  const screenshots = list(meta.screenshots).map((shot) => assetUrl(slug, shot)).filter(Boolean);
+
+  const latest = releases[0];
+  let size = latest?.size ?? null;
+  if (size === null && dir && latest?.file) {
+    try {
+      size = (await fs.stat(path.join(dir, latest.file.replace(/^\.?\//, '')))).size;
+    } catch {
+      size = null;
     }
-
-    // Скриншоты
-    const screenshots = list(meta.screenshots)
-      .map((s) => resolveAsset(entry.name, s))
-      .filter(Boolean);
-
-    const latest = releases[0];
-    const fileSize = latest?.size ?? (await readFileSize(appDir, latest?.file ?? null));
-
-    for (const release of releases) {
-      if (release.url) release.downloadUrl = release.url;
-      else if (release.file) release.downloadUrl = resolveAsset(entry.name, release.file);
-      else if (str(meta.apk)) release.downloadUrl = resolveAsset(entry.name, str(meta.apk));
-    }
-
-    const description =
-      str(meta.description) ||
-      str(meta.longDescription) ||
-      str(meta.summary) ||
-      'Описание пока не добавлено.';
-
-    apps.push({
-      id: entry.name,
-      packageId,
-      name,
-      summary: str(meta.summary) || description.split('\n')[0].slice(0, 160),
-      description,
-      version: latest?.version ?? str(meta.version) ?? '—',
-      versionCode: latest?.versionCode ?? num(meta.versionCode) ?? 0,
-      developer: str(meta.developer) || str(meta.author) || 'Неизвестный разработчик',
-      developerUrl: str(meta.developerUrl) || null,
-      license: str(meta.license) || 'Не указана',
-      website: str(meta.website) || null,
-      sourceCode: str(meta.sourceCode) || str(meta.source) || null,
-      issueTracker: str(meta.issueTracker) || str(meta.issues) || null,
-      donate: str(meta.donate) || null,
-      categories: list(meta.categories).length ? list(meta.categories) : list(meta.category),
-      tags: list(meta.tags),
-      iconUrl,
-      screenshots,
-      addedAt: str(meta.addedAt) || str(meta.date) || null,
-      updatedAt:
-        latest?.date || str(meta.updatedAt) || str(meta.lastUpdated) || new Date(0).toISOString(),
-      featured: bool(meta.featured),
-      free: meta.free === undefined ? true : bool(meta.free),
-      antiFeatures: list(meta.antiFeatures),
-      permissions: list(meta.permissions),
-      releases,
-      size: fileSize,
-      sha256: latest?.sha256 ?? str(meta.sha256) ?? null,
-      minSdk: latest?.minSdk ?? num(meta.minSdk),
-      targetSdk: latest?.targetSdk ?? num(meta.targetSdk),
-    });
   }
 
+  const description =
+    str(meta.description) ||
+    str(meta.longDescription) ||
+    str(meta.summary) ||
+    'Описание пока не добавлено.';
+
+  return {
+    id: slug,
+    packageId,
+    name,
+    summary: str(meta.summary) || description.split('\n')[0].slice(0, 160),
+    description,
+    version: latest?.version ?? str(meta.version) ?? '—',
+    versionCode: latest?.versionCode ?? num(meta.versionCode) ?? 0,
+    developer: str(meta.developer) || str(meta.author) || 'Неизвестный разработчик',
+    developerUrl: str(meta.developerUrl) || null,
+    license: str(meta.license) || 'Не указана',
+    website: str(meta.website) || null,
+    sourceCode: str(meta.sourceCode) || str(meta.source) || null,
+    issueTracker: str(meta.issueTracker) || str(meta.issues) || null,
+    donate: str(meta.donate) || null,
+    categories: list(meta.categories).length ? list(meta.categories) : list(meta.category),
+    tags: list(meta.tags),
+    iconUrl,
+    screenshots,
+    addedAt: str(meta.addedAt) || str(meta.date) || null,
+    updatedAt:
+      latest?.date || str(meta.updatedAt) || str(meta.lastUpdated) || new Date(0).toISOString(),
+    featured: bool(meta.featured),
+    free: meta.free === undefined ? true : bool(meta.free),
+    antiFeatures: list(meta.antiFeatures),
+    permissions: list(meta.permissions),
+    releases,
+    size,
+    sha256: latest?.sha256 ?? str(meta.sha256) ?? null,
+    minSdk: latest?.minSdk ?? num(meta.minSdk),
+    targetSdk: latest?.targetSdk ?? num(meta.targetSdk),
+  };
+}
+
+// ---------- публичное API модуля ----------
+
+export async function loadApps(): Promise<AppRecord[]> {
+  const local = await readLocalApps();
+  const localBySlug = new Map(local.map((app) => [app.slug, app]));
+
+  let entries: { slug: string; meta: Record<string, unknown>; dir: string | null }[] = [];
+
+  const remote = remoteEnabled() ? await readRemoteApps() : null;
+  if (remote && remote.length > 0) {
+    entries = remote.map((app) => ({
+      slug: app.slug,
+      meta: app.meta,
+      dir: localBySlug.get(app.slug)?.dir ?? null,
+    }));
+  }
+
+  // Пусто или удалённый источник недоступен — берём файлы из сборки
+  if (entries.length === 0) {
+    entries = local.map((app) => ({ slug: app.slug, meta: app.meta, dir: app.dir }));
+  }
+
+  const apps = await Promise.all(entries.map((entry) => buildApp(entry.slug, entry.meta, entry.dir)));
   return apps.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
@@ -290,5 +373,3 @@ export async function getApp(id: string): Promise<AppRecord | null> {
   const apps = await loadApps();
   return apps.find((app) => app.id === id) ?? null;
 }
-
-export { RAW_BASE };

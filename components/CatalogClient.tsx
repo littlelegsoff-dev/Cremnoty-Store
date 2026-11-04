@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { AppRecord, AppSummary } from '@/lib/types';
 import { AppCard } from './AppCard';
 import { AppIcon } from './AppIcon';
+import { plural } from '@/lib/format';
 import { AppDetail } from './AppDetail';
 import {
   Search,
@@ -126,6 +127,7 @@ export function CatalogClient({
     () =>
       [...apps]
         .sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? ''))
+        .filter((app) => !app.featured)
         .slice(0, 4),
     [apps],
   );
@@ -142,7 +144,7 @@ export function CatalogClient({
                 Каталог приложений
               </h2>
               <p className="mt-1 text-[13.5px] text-violet-200/50">
-                {filtered.length} из {apps.length} приложений · данные из открытого репозитория
+                {filtered.length} из {apps.length} · данные из открытого репозитория
               </p>
             </div>
 
@@ -256,7 +258,7 @@ export function CatalogClient({
       </section>
 
       {/* Новинки */}
-      {fresh.length > 0 && (
+      {fresh.length > 1 && (
         <section className="mt-16">
           <div className="flex items-center gap-2">
             <Clock className="size-4 text-violet-400" />
@@ -384,10 +386,12 @@ function Hero({
 
           <div className="mt-8 flex flex-wrap gap-x-8 gap-y-3 text-[12.5px] text-violet-200/50">
             <span>
-              <strong className="text-violet-50">{appsCount}</strong> приложений
+              <strong className="text-violet-50">{appsCount}</strong>{' '}
+              {plural(appsCount, ['приложение', 'приложения', 'приложений'])}
             </span>
             <span>
-              <strong className="text-violet-50">{categoriesCount}</strong> категорий
+              <strong className="text-violet-50">{categoriesCount}</strong>{' '}
+              {plural(categoriesCount, ['категория', 'категории', 'категорий'])}
             </span>
             <span>
               <strong className="text-violet-50">100%</strong> открытые метаданные

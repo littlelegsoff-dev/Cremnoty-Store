@@ -11,6 +11,26 @@ const RAW_BASE =
   process.env.CSTORE_RAW_BASE ??
   'https://raw.githubusercontent.com/littlelegsoff-dev/Cremnoty-Store/main/projects';
 
+/** Если файла нет в сборке, проксируем его из репозитория (а не редиректим). */
+async function proxyFromRepository(relative: string): Promise<Response> {
+  const url = `${RAW_BASE}/${relative.split('/').map(encodeURIComponent).join('/')}`;
+  try {
+    const response = await fetch(url, { next: { revalidate: 300 } });
+    if (!response.ok) return new Response('Not found', { status: 404 });
+    const body = await response.arrayBuffer();
+    return new Response(body, {
+      headers: {
+        'Content-Type': response.headers.get('content-type') ?? 'application/octet-stream',
+        'Content-Length': String(body.byteLength),
+        'Cache-Control': 'public, max-age=300, s-maxage=3600',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch {
+    return new Response('Not found', { status: 404 });
+  }
+}
+
 const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -59,11 +79,7 @@ export async function GET(
     });
   } catch {
     if (relative && !relative.includes('..')) {
-      const fallback = `${RAW_BASE}/${relative.split('/').map(encodeURIComponent).join('/')}`;
-      return new Response(null, {
-        status: 302,
-        headers: { Location: fallback, 'Cache-Control': 'public, max-age=60' },
-      });
+      return proxyFromRepository(relative);
     }
     return new Response('Not found', { status: 404 });
   }
