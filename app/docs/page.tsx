@@ -212,8 +212,9 @@ git commit -m "Add CremNotes"
 git push origin app/cremnotes`}</code>
           </pre>
           <p className="relative mt-3 text-[13.5px] text-violet-100/60">
-            После пуша откройте pull request в репозиторий. После мержа Vercel пересоберёт сайт и
-            приложение появится в каталоге автоматически.
+            После пуша в ветку <code className="font-mono text-violet-200/80">main</code> приложение
+            появляется в каталоге автоматически — данные читаются из репозитория при каждом
+            открытии страницы (кэш до минуты). Пересборка сайта не требуется.
           </p>
           <a
             href="https://github.com/littlelegsoff-dev/Cremnoty-Store"
@@ -238,6 +239,7 @@ git push origin app/cremnotes`}</code>
             { method: 'GET', path: '/api/apps', text: 'Список всех приложений и категорий' },
             { method: 'GET', path: '/api/apps/cremnotes', text: 'Полные метаданные приложения по slug' },
             { method: 'GET', path: '/projects/cremnotes/icon.png', text: 'Файлы приложения (иконки, скриншоты, APK)' },
+            { method: 'GET', path: '/api/status', text: 'Диагностика источника каталога' },
           ].map((route) => (
             <div
               key={route.path}
