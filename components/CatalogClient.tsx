@@ -274,7 +274,26 @@ export function CatalogClient({
         </section>
       )}
 
-      {detail && <AppDetail app={detail} onClose={closeDetail} />}
+      {detail && (
+        <AppDetail
+          app={detail}
+          onClose={closeDetail}
+          onOpenRelated={openApp}
+          related={apps
+            .filter(
+              (candidate) =>
+                candidate.id !== detail.id &&
+                candidate.categories.some((category) => detail.categories.includes(category)),
+            )
+            .slice(0, 3)
+            .map((candidate) => ({
+              id: candidate.id,
+              name: candidate.name,
+              iconUrl: candidate.iconUrl,
+              summary: candidate.summary,
+            }))}
+        />
+      )}
     </>
   );
 }

@@ -7,7 +7,17 @@ import { AppIcon } from './AppIcon';
 import { Download, X, ExternalLink, ChevronDown, Copy, Check, Info, ShieldCheck } from 'lucide-react';
 import { GithubIcon } from './GithubIcon';
 
-export function AppDetail({ app, onClose }: { app: AppRecord; onClose: () => void }) {
+export function AppDetail({
+  app,
+  onClose,
+  related = [],
+  onOpenRelated,
+}: {
+  app: AppRecord;
+  onClose: () => void;
+  related?: { id: string; name: string; iconUrl: string; summary: string }[];
+  onOpenRelated?: (id: string) => void;
+}) {
   const [showChangelog, setShowChangelog] = useState(false);
 
   useEffect(() => {
@@ -215,6 +225,34 @@ export function AppDetail({ app, onClose }: { app: AppRecord; onClose: () => voi
               источников разрешите установку для браузера в настройках Android.
             </span>
           </section>
+
+          {related.length > 0 && (
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-violet-300/60">
+                Похожие приложения
+              </h3>
+              <div className="mt-2.5 space-y-2">
+                {related.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onOpenRelated?.(item.id)}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-violet-400/10 bg-white/[0.02] p-2.5 text-left transition hover:border-violet-400/30 hover:bg-white/[0.05]"
+                  >
+                    <AppIcon src={item.iconUrl} name={item.name} size={36} rounded="rounded-xl" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium text-violet-50">
+                        {item.name}
+                      </span>
+                      <span className="block truncate text-[11.5px] text-violet-300/50">
+                        {item.summary}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           <div className="flex items-center gap-2 text-[11.5px] text-violet-300/40">
             <ShieldCheck className="size-3.5" />

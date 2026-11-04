@@ -77,7 +77,7 @@ export default function AboutPage() {
                 <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-violet-500/20 text-[11.5px] font-semibold text-violet-200">
                   {index + 1}
                 </span>
-                <span>{step}</span>
+                <span className="flex-1">{step}</span>
               </li>
             ))}
           </ol>
